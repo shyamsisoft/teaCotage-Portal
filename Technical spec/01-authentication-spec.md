@@ -142,10 +142,10 @@ CREATE TABLE `user_site_roles` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
--- 7. ADMIN_SESSIONS
+-- 7. USER_SESSIONS
 -- =============================================================================
-DROP TABLE IF EXISTS `admin_sessions`;
-CREATE TABLE `admin_sessions` (
+DROP TABLE IF EXISTS `user_sessions`;
+CREATE TABLE `user_sessions` (
     `id` CHAR(36) NOT NULL,
     `user_id` CHAR(36) NOT NULL,
     `session_token_hash` VARCHAR(255) NOT NULL,
@@ -157,7 +157,7 @@ CREATE TABLE `admin_sessions` (
     `last_accessed_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_session_token_hash` (`session_token_hash`),
-    KEY `idx_admin_sessions_user` (`user_id`),
+    KEY `idx_user_sessions_user` (`user_id`),
     CONSTRAINT `fk_sess_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -300,7 +300,7 @@ export async function POST(request: Request) {
     const userAgent = request.headers.get('user-agent') || '';
 
     await mysqlPool.execute(
-      `INSERT INTO admin_sessions (id, user_id, session_token_hash, client_ip, user_agent, expires_at) 
+      `INSERT INTO user_sessions (id, user_id, session_token_hash, client_ip, user_agent, expires_at) 
        VALUES (?, ?, ?, ?, ?, ?)`,
       [sessionId, user.id, tokenHash, clientIp, userAgent, expiresAt]
     );
@@ -336,12 +336,78 @@ export async function POST(request: Request) {
 
 ---
 
+### 2.3 Next.js Logout API Handler (`/app/api/v1/admin/auth/logout/route.ts`)
+
+```typescript
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import crypto from 'crypto';
+import { executeQuery } from '@/lib/db';
+import { hashToken } from '@/lib/auth';
+
+export async function POST(request: Request) {
+  try {
+    const cookieStore = cookies();
+    const sessionToken = cookieStore.get('cms_admin_session')?.value;
+
+    if (sessionToken) {
+      const tokenHash = hashToken(sessionToken);
+
+      // 1. Invalidate Session in Database
+      const [rows]: any = await executeQuery(
+        `SELECT user_id FROM user_sessions WHERE session_token_hash = ? AND is_revoked = 0`,
+        [tokenHash]
+      );
+
+      const userId = Array.isArray(rows) && rows.length > 0 ? rows[0].user_id : null;
+
+      await executeQuery(
+        `UPDATE user_sessions SET is_revoked = 1 WHERE session_token_hash = ?`,
+        [tokenHash]
+      );
+
+      // 2. Insert Security Audit Log
+      const clientIp = request.headers.get('x-forwarded-for') || '127.0.0.1';
+      const userAgent = request.headers.get('user-agent') || 'Unknown';
+      const auditId = crypto.randomUUID();
+
+      await executeQuery(
+        `INSERT INTO admin_audit_logs (id, user_id, event_type, ip_address, user_agent, metadata) 
+         VALUES (?, ?, 'ADMIN_LOGOUT', ?, ?, ?)`,
+        [auditId, userId, clientIp, userAgent, JSON.stringify({ timestamp: new Date().toISOString() })]
+      );
+    }
+
+    // 3. Clear Cookie
+    cookieStore.set('cms_admin_session', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      expires: new Date(0),
+    });
+
+    return NextResponse.json({
+      status: 'success',
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    console.error('Logout Error:', error);
+    return NextResponse.json({ status: 'error', message: 'Internal server error' }, { status: 500 });
+  }
+}
+```
+
+---
+
 ## 3. SSOT Traceability Matrix
 
 | SSOT Requirement (Functional Spec) | Technical Implementation (Next.js & MySQL) |
 | :--- | :--- |
 | **FS-01**: Admin Invitation Flow | MySQL `invitation_tokens` table + Next.js token activation route `/admin/activate` |
 | **FS-02**: Multi-Site Role Isolation | MySQL `user_site_roles` composite unique constraint `(user_id, site_id, role_id)` |
-| **FS-03**: Secure Admin Session | Next.js `cookies().set()` with `HttpOnly`, `SameSite=Strict` + MySQL `admin_sessions` table |
+| **FS-03**: Secure Admin Session | Next.js `cookies().set()` with `HttpOnly`, `SameSite=Strict` + MySQL `user_sessions` table |
 | **FS-04**: Password Hashing | Argon2id verification using `argon2` npm library |
 | **FS-05**: Audit Trail | `admin_audit_logs` MySQL InnoDB table with JSON metadata column |
+| **FS-06**: Admin Logout & Invalidation | Next.js route `/api/v1/admin/auth/logout` + `user_sessions.is_revoked = 1` + cookie deletion |
+

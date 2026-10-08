@@ -142,6 +142,17 @@ sequenceDiagram
 
 ---
 
+### 3.5 Admin Logout & Session Invalidation Workflow
+
+When a staff member clicks the **Logout** button within the CMS Admin Portal header or dashboard:
+1. **User Action**: The client triggers a request to `POST /api/v1/admin/auth/logout`.
+2. **Session Invalidation**: The Next.js API route resolves the active `cms_admin_session` cookie token, updates the session record in `user_sessions` by setting `is_revoked = 1`, and invalidates any subsequent requests using this token.
+3. **Cookie Revocation**: The HTTP-Only `cms_admin_session` cookie is deleted from the client browser by setting `maxAge: 0` and an expired timestamp.
+4. **Audit Logging**: An immutable audit record with event type `ADMIN_LOGOUT` is written to `admin_audit_logs`.
+5. **Client Redirection**: The user interface clears local application context and redirects the browser back to `/admin/login?logged_out=true`.
+
+---
+
 ## 4. Multi-Site Permission Matrix & Scoping Engine
 
 ### 4.1 Permission Mapping Table
@@ -229,7 +240,7 @@ erDiagram
         datetime assigned_at
     }
 
-    ADMIN_SESSIONS {
+    USER_SESSIONS {
         char36 id PK
         char36 user_id FK
         string session_token_hash UK

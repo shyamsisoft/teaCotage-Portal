@@ -1,10 +1,31 @@
 # AI Design & Code Architecture Rules
 
-This rule file defines the design standards, component architecture guidelines, and UI/UX conventions for the **CMS Admin Portal**.
+This rule file defines the software engineering principles, design standards, component architecture guidelines, and UI/UX conventions for the **CMS Admin Portal**.
 
 ---
 
-## 1. UI/UX Design System Guidelines
+## 1. Core Software Design Principles
+
+### SOLID & Clean Architecture
+1. **Single Responsibility Principle (SRP)**:
+   - Separate UI presentation from data fetching and mutation logic.
+   - Keep API route handlers concise by delegating database queries to dedicated service helpers in `/lib/services/`.
+2. **Open/Closed Principle (OCP)**:
+   - UI primitives (`Button`, `Modal`, `Input`, `Badge`) must accept customizable variants/props without modifying core component source code.
+3. **Dependency Inversion Principle (DIP)**:
+   - Services and utilities rely on TypeScript interfaces rather than hardcoding tightly-coupled implementations.
+
+### Defensive Security & Quality Principles
+1. **Never Trust Client Input (Zod Validation)**:
+   - All incoming API request bodies, query params, and Server Action payloads MUST be validated using **Zod** schemas before processing.
+2. **SQL Injection Prevention**:
+   - Never concatenate raw user input into SQL strings. Always use prepared statement parameters (`mysqlPool.execute(sql, [params])`).
+3. **DRY & Reusability**:
+   - Shared utility functions (date formatters, permission checks, string sanitizers) belong in `/lib/utils/`.
+
+---
+
+## 2. UI/UX Design System Guidelines
 
 ### Color Palette & Theme Tokens
 - **Primary Color**: Deep Forest / Tea Leaf Green (`#1B4D3E` / HSL `162, 48%, 21%`).
@@ -31,7 +52,7 @@ This rule file defines the design standards, component architecture guidelines, 
 
 ---
 
-## 2. Next.js Code Architecture Guidelines
+## 3. Next.js Code Architecture Guidelines
 
 1. **Folder Structure**:
    ```text
@@ -49,11 +70,30 @@ This rule file defines the design standards, component architecture guidelines, 
    ├── ui/               # Generic reusable UI primitives (Button, Modal, Input, Badge)
    └── admin/            # Admin portal domain components (SiteSelector, UserTable)
    lib/
-   ├── db.ts             # MySQL pool / ORM client
+   ├── db.ts             # MySQL pool client
    ├── auth.ts           # Argon2 & Session utilities
-   └── permissions.ts    # Permission check helpers
+   ├── permissions.ts    # Permission check helpers
+   └── services/         # Modular service layer (UserService, ContentService)
    ```
 
 2. **Server vs. Client Components**:
    - Default to React Server Components (`RSC`) for data fetching.
    - Use `'use client'` only when state (`useState`), effects (`useEffect`), or interactive browser events are required.
+
+---
+
+## 4. Semantic Naming Conventions & Standards
+
+1. **Database Schema Naming**:
+   - Tables: Plural `snake_case` (`users`, `sites`, `cms_sessions`, `audit_logs`).
+   - Primary Keys: `id` (CHAR(36) UUID).
+   - Foreign Keys: `table_name_singular_id` (`user_id`, `site_id`, `role_id`).
+   - Avoid ambiguous or misleading table names (e.g. use `cms_sessions` instead of `admin_sessions` when tracking sessions for all portal users).
+
+2. **Files & Folders**:
+   - `kebab-case` for TypeScript, component files, and folders (`site-context.ts`, `admin-login-flow.test.ts`).
+
+3. **Code & Symbols**:
+   - `PascalCase` for React components and Zod validation schemas (`LoginSchema`, `SiteSelector`).
+   - `camelCase` for functions, methods, and variables (`verifyPassword`, `generateSessionToken`).
+   - Self-describing variable names without vague abbreviations (`paramIndex` instead of `p`, `userData` instead of `usr`).
