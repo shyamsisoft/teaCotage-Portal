@@ -72,6 +72,43 @@ graph TD
 5. **Site Auditor / Previewer (Site-Scoped)**:
    - Read-only access to inspect draft pages, preview unpublished changes, and audit site content history.
 
+### 2.3 User Stories
+* **US-AUTH-01 (Staff Login)**: As an authorized Staff Member, I want to securely log in to the Tea Cottage Portal using my email and password, so that I can access my assigned property management tools.
+* **US-AUTH-02 (Session Invalidation & Logout)**: As an active Staff Member, I want to log out of the portal, so that my active session token is revoked in the database and unauthorized access to my account is prevented.
+* **US-AUTH-03 (Account Lockout)**: As a Security Administrator, I want the portal to temporarily lock accounts after 5 failed login attempts, so that brute-force credential attacks are blocked.
+
+### 2.4 System Use Cases
+
+#### Use Case: UC-AUTH-001 - Staff Member Login
+* **Primary Actor**: Staff Member / Administrator
+* **Preconditions**: User has an ACTIVE account created in the `users` database table.
+* **Main Success Scenario**:
+  1. User navigates to `/admin/login`.
+  2. System renders the branded **Tea Cottage Portal** login screen.
+  3. User enters email address (`admin@teacottage.com`) and password (`SuperSecurePassword123!`).
+  4. User clicks **"Sign In to Portal"** (`button[type="submit"]`).
+  5. System validates inputs using `LoginSchema` Zod validation.
+  6. System verifies password against Argon2id hash.
+  7. System generates session token, inserts record into `user_sessions`, and logs `ADMIN_LOGIN_SUCCESS`.
+  8. System sets SameSite Lax HTTP-Only cookie `cms_admin_session`.
+  9. System automatically redirects user to `/admin/dashboard`.
+* **Alternative / Error Flows**:
+  - *Invalid Credentials*: System displays error alert "Invalid email or password" (`401`).
+  - *Account Locked*: System displays error alert "Account is temporarily locked" (`423`).
+* **Postconditions**: Active session established; user redirected to dashboard.
+
+#### Use Case: UC-AUTH-002 - Session Revocation & Logout
+* **Primary Actor**: Authenticated Staff Member
+* **Preconditions**: User holds an active `cms_admin_session` cookie.
+* **Main Success Scenario**:
+  1. User clicks the **"Logout"** button in the navigation bar.
+  2. Client triggers `POST /api/v1/admin/auth/logout`.
+  3. System updates `user_sessions.is_revoked = 1` for the active token hash.
+  4. System inserts `ADMIN_LOGOUT` record into `admin_audit_logs`.
+  5. System clears `cms_admin_session` cookie.
+  6. Client redirects user to `/admin/login?logged_out=true`.
+* **Postconditions**: Session revoked in database; cookies cleared; user returned to login screen.
+
 ---
 
 ## 3. Admin Portal Functional Capabilities & Workflows

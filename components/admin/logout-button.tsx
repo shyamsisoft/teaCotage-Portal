@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { LogOut, Loader2 } from 'lucide-react';
 
 interface LogoutButtonProps {
@@ -10,7 +9,6 @@ interface LogoutButtonProps {
 }
 
 export function LogoutButton({ className = '', variant = 'header' }: LogoutButtonProps) {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogout = async () => {
@@ -18,27 +16,21 @@ export function LogoutButton({ className = '', variant = 'header' }: LogoutButto
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/v1/admin/auth/logout', {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 800);
+
+      await fetch('/api/v1/admin/auth/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-      });
-
-      if (response.ok) {
-        // Soft redirect to login page with logged_out parameter
-        router.push('/admin/login?logged_out=true');
-        router.refresh();
-      } else {
-        // Fallback hard redirect if API returned non-200
-        window.location.href = '/admin/login?logged_out=true';
-      }
+        signal: controller.signal,
+      }).catch(() => {});
+      clearTimeout(timeoutId);
     } catch (error) {
-      console.error('Logout failed:', error);
-      // Hard redirect fallback on network error
-      window.location.href = '/admin/login?logged_out=true';
+      console.error('Logout request error:', error);
     } finally {
-      setIsLoading(false);
+      window.location.href = '/admin/login?logged_out=true';
     }
   };
 
@@ -47,7 +39,7 @@ export function LogoutButton({ className = '', variant = 'header' }: LogoutButto
       type="button"
       onClick={handleLogout}
       disabled={isLoading}
-      aria-label="Log out of CMS Admin Portal"
+      aria-label="Log out of Tea Cottage Portal"
       className={`inline-flex items-center gap-2 rounded-lg text-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed ${
         variant === 'header'
           ? 'px-3 py-1.5 bg-slate-900 hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-slate-800 hover:border-red-800/80 shadow-sm'

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
-import { executeQuery } from '@/lib/db';
+import { db, userSessions, adminAuditLogs, eq, and } from '@/lib/db';
 import { hashToken } from '@/lib/auth';
 
 export async function POST(request: any) {
@@ -18,45 +18,41 @@ export async function POST(request: any) {
 
     if (sessionToken) {
       const tokenHash = hashToken(sessionToken);
-
-      // 2. Fetch session and active user ID
       let userId: string | null = null;
-      try {
-        const [rows]: any = await executeQuery(
-          `SELECT user_id FROM user_sessions WHERE session_token_hash = ? AND is_revoked = 0`,
-          [tokenHash]
-        );
-        if (Array.isArray(rows) && rows.length > 0) {
-          userId = rows[0].user_id;
-        }
-      } catch (dbErr) {
-        console.error('Database query error during logout session lookup:', dbErr);
-      }
-
-      // 3. Mark session as revoked in database
-      try {
-        await executeQuery(
-          `UPDATE user_sessions SET is_revoked = 1 WHERE session_token_hash = ?`,
-          [tokenHash]
-        );
-      } catch (updateErr) {
-        console.error('Database update error during logout session revocation:', updateErr);
-      }
-
-      // 4. Record Security Audit Log
       const clientIp = request.headers?.get?.('x-forwarded-for') || '127.0.0.1';
       const userAgent = request.headers?.get?.('user-agent') || 'Unknown';
       const auditId = crypto.randomUUID();
 
       try {
-        await executeQuery(
-          `INSERT INTO admin_audit_logs (id, user_id, event_type, ip_address, user_agent, metadata) 
-           VALUES (?, ?, 'ADMIN_LOGOUT', ?, ?, ?)`,
-          [auditId, userId, clientIp, userAgent, JSON.stringify({ timestamp: new Date().toISOString() })]
-        );
-      } catch (auditErr) {
-        console.error('Database audit error during logout:', auditErr);
+        const rows = await db
+          .select({ userId: userSessions.userId })
+          .from(userSessions)
+          .where(and(eq(userSessions.sessionTokenHash, tokenHash), eq(userSessions.isRevoked, false)));
+        if (rows.length > 0) {
+          userId = rows[0].userId;
+        }
+      } catch (err) {
+        console.error(err);
       }
+
+      await Promise.all([
+        db
+          .update(userSessions)
+          .set({ isRevoked: true })
+          .where(eq(userSessions.sessionTokenHash, tokenHash))
+          .catch(() => {}),
+        db
+          .insert(adminAuditLogs)
+          .values({
+            id: auditId,
+            userId: userId,
+            eventType: 'ADMIN_LOGOUT',
+            ipAddress: clientIp,
+            userAgent: userAgent,
+            metadata: JSON.stringify({ timestamp: new Date().toISOString() }),
+          })
+          .catch(() => {}),
+      ]);
     }
 
     // 5. Invalidate cookie via Next.js headers cookie store

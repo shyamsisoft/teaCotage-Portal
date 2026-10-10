@@ -27,17 +27,26 @@ function LoginForm() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage(null);
     setFieldErrors({});
 
+    const form = e.currentTarget;
+    const emailVal = form.querySelector<HTMLInputElement>('input[name="email"]')?.value || formData.email;
+    const passwordVal = form.querySelector<HTMLInputElement>('input[name="password"]')?.value || formData.password;
+
+    const payload = {
+      email: emailVal,
+      password: passwordVal,
+    };
+
     try {
       const response = await fetch('/api/v1/admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -52,8 +61,8 @@ function LoginForm() {
         return;
       }
 
-      // Success -> Redirect to Dashboard
-      router.push(redirectUrl);
+      // Success -> Perform clean hard navigation to Dashboard with active session cookie
+      window.location.href = redirectUrl;
     } catch (err: any) {
       console.error('Login submit error:', err);
       setErrorMessage('Network connection error. Please try again.');
@@ -138,7 +147,7 @@ function LoginForm() {
         isLoading={isLoading}
         className="w-full mt-2 font-semibold text-sm bg-gradient-to-r from-tea-800 to-tea-900 hover:from-tea-900 hover:to-tea-950 border border-tea-700/50"
       >
-        Sign In to Admin Portal
+        Sign In to Portal
       </Button>
     </form>
   );
@@ -158,10 +167,10 @@ export default function AdminLoginPage() {
             <ShieldCheck className="h-8 w-8 text-tea-amber" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-            CMS Admin Portal
+            Tea Cottage Portal
           </h1>
           <p className="text-xs text-slate-400 font-medium">
-            Management Portal for <span className="text-tea-amber font-semibold">Tea Cottage</span> & Multi-Site Ecosystem
+            Management Portal for <span className="text-tea-amber font-semibold">Tea Cottage</span> & Managed Properties
           </p>
         </div>
 
@@ -170,7 +179,7 @@ export default function AdminLoginPage() {
           <div className="mb-6 flex items-center justify-between border-b border-slate-800 pb-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-100">Staff Authentication</h2>
-              <p className="text-xs text-slate-400">Sign in with your authorized admin credentials</p>
+              <p className="text-xs text-slate-400">Sign in with your authorized credentials</p>
             </div>
             <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-tea-amber bg-tea-800/30 border border-tea-800/60 px-2 py-1 rounded-full">
               <Sparkles className="h-3 w-3" /> Secure SSO
@@ -184,7 +193,7 @@ export default function AdminLoginPage() {
 
         {/* Footer */}
         <p className="mt-8 text-center text-xs text-slate-500">
-          Strictly for authorized staff. Multi-Site CMS Platform v1.0
+          Strictly for authorized staff. Tea Cottage Portal v1.0
         </p>
       </div>
     </div>

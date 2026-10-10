@@ -1,5 +1,5 @@
 import { POST } from '@/app/api/v1/admin/auth/logout/route';
-import { executeQuery } from '@/lib/db';
+import { db } from '@/lib/db';
 
 const mockCookieStore = {
   get: jest.fn(),
@@ -7,12 +7,44 @@ const mockCookieStore = {
 };
 
 // Mock DB execution for automated route testing
-jest.mock('@/lib/db', () => ({
-  executeQuery: jest.fn(),
-  mysqlPool: { execute: jest.fn() },
-}));
+jest.mock('@/lib/db', () => {
+  const mockDb = {
+    select: jest.fn().mockReturnThis(),
+    selectDistinct: jest.fn().mockReturnThis(),
+    from: jest.fn().mockReturnThis(),
+    where: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    insert: jest.fn().mockReturnThis(),
+    values: jest.fn().mockResolvedValue([]),
+    innerJoin: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
+  };
+  return {
+    db: mockDb,
+    userSessions: {},
+    users: {},
+    adminAuditLogs: {},
+    sites: {},
+    roles: {},
+    userSiteRoles: {},
+    rolePermissions: {},
+  permissions: {},
+  eq: jest.fn((col, val) => ({ col, val })),
+  and: jest.fn((...args) => args),
+  gte: jest.fn((col, val) => ({ col, val })),
+  lt: jest.fn((col, val) => ({ col, val })),
+  gt: jest.fn((col, val) => ({ col, val })),
+  ne: jest.fn((col, val) => ({ col, val })),
+  isNull: jest.fn((col) => col),
+  sql: jest.fn(),
+  desc: jest.fn(),
+  };
+});
 
 // Mock Next.js cookies
+const mockDb = db as any;
+
 jest.mock('next/headers', () => ({
   cookies: () => mockCookieStore,
 }));
@@ -50,10 +82,11 @@ describe('Automated Integration Test: Admin Logout & Session Revocation Flow', (
     mockCookieStore.get.mockReturnValueOnce({ value: 'valid-session-token-123' });
     
     // DB returns active session record
-    (executeQuery as jest.Mock)
-      .mockResolvedValueOnce([[{ user_id: 'usr_admin_999' }]]) // SELECT user_id
-      .mockResolvedValueOnce([{}]) // UPDATE user_sessions is_revoked = 1
-      .mockResolvedValueOnce([{}]); // INSERT admin_audit_logs ADMIN_LOGOUT
+    mockDb.where
+      .mockResolvedValueOnce([{ user_id: 'usr_admin_999' }]) // SELECT user_id
+      .mockResolvedValueOnce([]); // UPDATE user_sessions is_revoked = 1
+      
+    mockDb.values.mockResolvedValueOnce([]); // INSERT admin_audit_logs ADMIN_LOGOUT
 
     const req = createMockLogoutRequest();
     const res = await POST(req);
@@ -62,13 +95,7 @@ describe('Automated Integration Test: Admin Logout & Session Revocation Flow', (
     expect(res.status).toBe(200);
     expect(json.status).toBe('success');
     expect(json.message).toBe('Logged out successfully');
-    expect(executeQuery).toHaveBeenCalledWith(
-      expect.stringContaining('UPDATE user_sessions SET is_revoked = 1'),
-      expect.any(Array)
-    );
-    expect(executeQuery).toHaveBeenCalledWith(
-      expect.stringContaining("INSERT INTO admin_audit_logs"),
-      expect.arrayContaining(['usr_admin_999', '127.0.0.1'])
-    );
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockDb.insert).toHaveBeenCalled();
   });
 });

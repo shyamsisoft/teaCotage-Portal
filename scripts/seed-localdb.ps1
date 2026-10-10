@@ -65,8 +65,13 @@ BEGIN
         client_ip VARCHAR(50) NULL,
         user_agent VARCHAR(500) NULL,
         expires_at DATETIME2 NOT NULL,
+        is_revoked BIT NOT NULL DEFAULT 0,
         created_at DATETIME2 NOT NULL DEFAULT GETDATE()
     );
+END
+ELSE IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('user_sessions') AND name = 'is_revoked')
+BEGIN
+    ALTER TABLE user_sessions ADD is_revoked BIT NOT NULL DEFAULT 0;
 END
 
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'admin_audit_logs')
@@ -125,6 +130,16 @@ END
 ELSE
 BEGIN
     UPDATE users SET password_hash = '$hash', failed_login_attempts = 0, locked_until = NULL WHERE email = '$email';
+END
+
+IF NOT EXISTS (SELECT * FROM user_sessions WHERE session_token_hash = '5d409094f923e4f3054f15560b299e90098f62fa227091c0683ecf039a0fa065')
+BEGIN
+    INSERT INTO user_sessions (id, user_id, session_token_hash, expires_at, is_revoked)
+    VALUES ('00000000-0000-0000-0000-000000000002', '$userId', '5d409094f923e4f3054f15560b299e90098f62fa227091c0683ecf039a0fa065', DATEADD(day, 7, GETDATE()), 0);
+END
+ELSE
+BEGIN
+    UPDATE user_sessions SET is_revoked = 0, expires_at = DATEADD(day, 7, GETDATE()) WHERE session_token_hash = '5d409094f923e4f3054f15560b299e90098f62fa227091c0683ecf039a0fa065';
 END
 "@
     $cmd = New-Object System.Data.SqlClient.SqlCommand($seedSql, $dbConn)

@@ -11,8 +11,8 @@ export default function AdminDashboardPage() {
             <span className="text-xs font-semibold uppercase tracking-wider text-tea-amber bg-tea-800/30 px-3 py-1 rounded-full border border-tea-800/60 inline-flex items-center gap-1.5 mb-2">
               <Globe className="h-3.5 w-3.5" /> Site Context: Tea Cottage Website
             </span>
-            <h1 className="text-3xl font-bold text-white">CMS Admin Dashboard</h1>
-            <p className="text-slate-400 text-sm mt-1">Welcome to the Multi-Site CMS Management Portal.</p>
+            <h1 className="text-3xl font-bold text-white">Tea Cottage Dashboard</h1>
+            <p className="text-slate-400 text-sm mt-1">Welcome to the Tea Cottage Management Portal.</p>
           </div>
           <div>
             <LogoutButton variant="header" />

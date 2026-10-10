@@ -25,7 +25,9 @@ export function middleware(request: NextRequest) {
   }
 
   // 3. Check Session Cookie for protected routes
-  const sessionToken = request.cookies.get('cms_admin_session')?.value;
+  const sessionToken =
+    request.cookies.get('cms_admin_session')?.value ||
+    request.cookies.get('tea_cms_session')?.value;
 
   if (!sessionToken) {
     if (pathname.startsWith('/api/v1/admin')) {

@@ -21,8 +21,8 @@ export async function verifyPassword(hash: string, plain: string): Promise<boole
 export async function hashPassword(plain: string): Promise<string> {
   return await argon2.hash(plain, {
     type: argon2.argon2id,
-    memoryCost: 65536,
-    timeCost: 3,
-    parallelism: 4,
+    memoryCost: 19456, // 19 MB (OWASP web application standard)
+    timeCost: 2,       // 2 iterations
+    parallelism: 1,
   });
 }

@@ -1,14 +1,46 @@
 import { POST } from '@/app/api/v1/admin/auth/login/route';
-import { executeQuery } from '@/lib/db';
+import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 
 // Mock DB execution for automated route testing
-jest.mock('@/lib/db', () => ({
-  executeQuery: jest.fn(),
-  mysqlPool: { execute: jest.fn() },
-}));
+jest.mock('@/lib/db', () => {
+  const mockDb = {
+    select: jest.fn().mockReturnThis(),
+    selectDistinct: jest.fn().mockReturnThis(),
+    from: jest.fn().mockReturnThis(),
+    where: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockReturnThis(),
+    set: jest.fn().mockReturnThis(),
+    insert: jest.fn().mockReturnThis(),
+    values: jest.fn().mockResolvedValue([]),
+    innerJoin: jest.fn().mockReturnThis(),
+    leftJoin: jest.fn().mockReturnThis(),
+  };
+  return {
+    db: mockDb,
+    userSessions: {},
+    users: {},
+    adminAuditLogs: {},
+    sites: {},
+    roles: {},
+    userSiteRoles: {},
+  rolePermissions: {},
+  permissions: {},
+  eq: jest.fn((col, val) => ({ col, val })),
+  and: jest.fn((...args) => args),
+  gte: jest.fn((col, val) => ({ col, val })),
+  lt: jest.fn((col, val) => ({ col, val })),
+  gt: jest.fn((col, val) => ({ col, val })),
+  ne: jest.fn((col, val) => ({ col, val })),
+  isNull: jest.fn((col) => col),
+  sql: jest.fn(),
+  desc: jest.fn(),
+  };
+});
 
 // Mock Next.js cookies
+const mockDb = db as any;
+
 jest.mock('next/headers', () => ({
   cookies: () => ({
     set: jest.fn(),
@@ -45,7 +77,7 @@ describe('Automated Integration Test: Admin Login Click & Error Flow', () => {
   });
 
   it('2. Automated Check: Should return 401 Unauthorized for non-existent email', async () => {
-    (executeQuery as jest.Mock).mockResolvedValueOnce([[]]); // DB returns empty array
+    mockDb.where.mockResolvedValueOnce([]); // DB returns empty array
 
     const req = createMockRequest({ email: 'nonexistent@teacottage.com', password: 'ValidPassword123!' });
 
@@ -58,17 +90,15 @@ describe('Automated Integration Test: Admin Login Click & Error Flow', () => {
 
   it('3. Automated Check: Should return 423 Locked when account is temporarily locked', async () => {
     const futureDate = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    (executeQuery as jest.Mock).mockResolvedValueOnce([
-      [
-        {
-          id: 'u_123',
-          email: 'locked@teacottage.com',
-          password_hash: 'hashed',
-          status: 'ACTIVE',
-          failed_login_attempts: 5,
-          locked_until: futureDate,
-        },
-      ],
+    mockDb.where.mockResolvedValueOnce([
+      {
+        id: 'u_123',
+        email: 'locked@teacottage.com',
+        password_hash: 'hashed',
+        status: 'ACTIVE',
+        failed_login_attempts: 5,
+        locked_until: futureDate,
+      },
     ]);
 
     const req = createMockRequest({ email: 'locked@teacottage.com', password: 'ValidPassword123!' });
@@ -83,35 +113,33 @@ describe('Automated Integration Test: Admin Login Click & Error Flow', () => {
   it('4. Automated Check: Should return 200 OK and issue session for valid credentials', async () => {
     const validHash = await hashPassword('ValidPassword123!');
     
-    (executeQuery as jest.Mock)
+    mockDb.where
       .mockResolvedValueOnce([
-        [
-          {
-            id: 'u_admin_01',
-            email: 'admin@teacottage.com',
-            password_hash: validHash,
-            first_name: 'Admin',
-            last_name: 'User',
-            status: 'ACTIVE',
-            global_role: 'SUPER_ADMIN',
-            failed_login_attempts: 0,
-            locked_until: null,
-          },
-        ],
+        {
+          id: 'u_admin_01',
+          email: 'admin@teacottage.com',
+          password_hash: validHash,
+          first_name: 'Admin',
+          last_name: 'User',
+          status: 'ACTIVE',
+          global_role: 'SUPER_ADMIN',
+          failed_login_attempts: 0,
+          locked_until: null,
+        },
       ])
-      .mockResolvedValueOnce([{}]) // reset attempts
-      .mockResolvedValueOnce([{}]) // insert session
-      .mockResolvedValueOnce([{}]) // insert audit log
+      .mockResolvedValueOnce([]) // reset attempts
       .mockResolvedValueOnce([
-        [
-          {
-            site_id: 'site_tc',
-            site_slug: 'tea-cottage',
-            site_name: 'Tea Cottage Website',
-            role_code: 'SITE_ADMIN',
-          },
-        ],
+        {
+          site_id: 'site_tc',
+          site_slug: 'tea-cottage',
+          site_name: 'Tea Cottage Website',
+          role_code: 'SITE_ADMIN',
+        },
       ]);
+    
+    mockDb.values
+      .mockResolvedValueOnce([]) // insert session
+      .mockResolvedValueOnce([]); // insert audit log
 
     const req = createMockRequest({ email: 'admin@teacottage.com', password: 'ValidPassword123!' });
 

@@ -5,9 +5,9 @@
 | **Document ID** | FS-ARCH-000 |
 | **Authority** | **SINGLE SOURCE OF TRUTH (SSOT)** for System Architecture Scope |
 | **Module Name** | Core System Architecture & Multi-Site CMS Engine |
-| **Target Technology Stack** | **Next.js 14+ (App Router, TypeScript)** & **Multi-Database Support (MySQL 8.0+ / MSSQL LocalDB)** |
+| **Target Technology Stack** | **Next.js 14+ (App Router, TypeScript)** & **MySQL 8.0+ (InnoDB)** |
 | **Status** | Approved |
-| **Version** | 1.0.0 |
+| **Version** | 1.1.0 |
 | **Author** | System Architecture Team |
 
 > [!IMPORTANT]
@@ -138,20 +138,25 @@ The Admin Portal user interface is structured around a unified dashboard layout:
 
 ---
 
-## 5. Multi-Database Engine Strategy & Connection Requirements
+## 5. Database Engine Strategy & Connection Requirements
 
-### 5.1 Dual Environment Engine Requirement
-To support diverse developer environments and cloud deployments, the CMS Portal MUST support running against multiple relational database providers cleanly:
-* **Local Development Engine**: Microsoft SQL Server Express LocalDB (`(localdb)\MSSQLLocalDB`) on Windows.
-* **Production / Cloud Engine**: MySQL 8.0+ (InnoDB) or PostgreSQL.
-* **Provider Switching**: The active database engine MUST be configurable via a single environment flag (`DB_PROVIDER=mssql` or `DB_PROVIDER=mysql`), executing through a unified database strategy adapter without requiring code changes.
+### 5.1 Single Database Provider Standard
+The CMS Portal uses **MySQL 8.0+ (InnoDB)** as the sole relational database engine across all environments — local development, staging, and production.
 
-### 5.2 Environment Schema Validation Requirement
+* **Local Development**: MySQL 8.0+ running locally via Docker (`mysql:8.0` image) or a native MySQL installation.
+* **Production / Cloud**: MySQL 8.0+ managed instance (e.g. AWS RDS, PlanetScale, DigitalOcean Managed MySQL).
+* **No Multi-Provider Fallback**: The dual MSSQL/MySQL strategy has been retired. A single MySQL provider is enforced across all environments via `DB_PROVIDER=mysql` in environment configuration.
+
+### 5.2 Environment Configuration Requirement
 * **Startup Validation**: System startup MUST validate database environment configuration using strict **Zod** schemas.
-* **Actionable Error Reporting**: If a connection parameter is missing (e.g. missing `Driver={...}` in LocalDB connection string or invalid credentials), the system MUST output actionable human-readable diagnostic messages instead of crashing silently.
+* **Actionable Error Reporting**: If a connection parameter is missing or incorrect, the system MUST output actionable human-readable diagnostic messages instead of crashing silently.
+* **Externalized Config**: All connection parameters (`MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`) MUST be externalized in `.env.local` — never hardcoded.
 
-### 5.3 Automated Connection Health Check Requirement
-* **CLI Health Checker**: The portal MUST include an automated CLI health checker (`npm run db:check`) that validates database connectivity, measures query latency, and verifies key schema tables prior to launching the server.
+### 5.3 Object-Relational Mapping (ORM) Standard Requirement
+* **Drizzle ORM Integration**: The system MUST use **Drizzle ORM** (`drizzle-orm` & `drizzle-kit`) as its sole ORM standard against MySQL 8.0+ for sub-millisecond query execution, zero runtime overhead, and 100% TypeScript type safety.
+* **No Raw SQL in Route Handlers**: All database access in API route handlers MUST use Drizzle ORM query builders (`db.select()`, `db.insert()`, `db.update()`). Raw SQL strings are prohibited in application code.
+* **Schema Single Source of Truth**: All database tables, columns, indexes, foreign keys, and relations MUST be defined in `lib/db/schema.ts`.
+* **Visual Database Inspection**: The portal MUST include Drizzle Studio support (`npx drizzle-kit studio`) for zero-code database table inspection in local developer environments.
 
 ---
 

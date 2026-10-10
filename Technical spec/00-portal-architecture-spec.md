@@ -7,7 +7,7 @@
 | **Module Name** | Core System Architecture & Multi-Site CMS Engine |
 | **Target Technology Stack** | **Next.js 14+ (App Router, TypeScript)** & **MySQL 8.0+ (InnoDB)** |
 | **Status** | Approved |
-| **Version** | 1.1.0 |
+| **Version** | 1.2.0 |
 
 > [!IMPORTANT]
 > **Source of Truth Compliance Governance**:
@@ -73,33 +73,23 @@ d:\teaCotage-Portal\
 
 ---
 
-## 3. Multi-Database Architecture & Abstraction Layer (`/lib/db.ts`)
+## 3. Database Architecture & Connection Layer (`/lib/db/`)
 
-The CMS Portal supports multiple relational database engines (**MS SQL Server Express LocalDB** for Windows local development and **MySQL 8.0+** for production deployments) via a unified query execution layer in `/lib/db.ts`:
+The CMS Portal uses **MySQL 8.0+ (InnoDB)** as its sole database engine via **Drizzle ORM**. All raw SQL is prohibited in route handlers — only Drizzle query builders are used.
 
+### 3.1 File Structure
+```text
+lib/
+├── db/
+│   ├── pool.ts       # MySQL2 connection pool (eager warmup)
+│   ├── schema.ts     # Drizzle table definitions (SSOT for all 8 tables)
+│   └── index.ts      # Drizzle ORM instance + re-exports
+└── db.ts             # Public export facade (db, schemas, operators)
+```
+
+### 3.2 MySQL Connection Pool (`lib/db/pool.ts`)
 ```typescript
-import mssql from 'mssql/msnodesqlv8';
 import mysql from 'mysql2/promise';
-
-export const DB_PROVIDER = process.env.DB_PROVIDER || 'mssql';
-
-const rawMssqlString =
-  process.env.MSSQL_CONNECTION_STRING ||
-  'Driver={ODBC Driver 17 for SQL Server};Server=(localdb)\\MSSQLLocalDB;Database=teacottage_cms;Trusted_Connection=yes;';
-
-export const MSSQL_CONNECTION_STRING =
-  !rawMssqlString.includes('Driver=') && rawMssqlString.includes('(localdb)')
-    ? `Driver={ODBC Driver 17 for SQL Server};${rawMssqlString}`
-    : rawMssqlString;
-
-let mssqlPoolPromise: Promise<any> | null = null;
-
-export async function getMssqlPool(): Promise<any> {
-  if (!mssqlPoolPromise) {
-    mssqlPoolPromise = mssql.connect({ connectionString: MSSQL_CONNECTION_STRING } as any);
-  }
-  return mssqlPoolPromise;
-}
 
 export const mysqlPool = mysql.createPool({
   host: process.env.MYSQL_HOST || 'localhost',
@@ -109,27 +99,47 @@ export const mysqlPool = mysql.createPool({
   database: process.env.MYSQL_DATABASE || 'teacottage_cms',
   waitForConnections: true,
   connectionLimit: 20,
+  queueLimit: 0,
+  timezone: '+00:00',
+  charset: 'utf8mb4',
 });
 
-// Unified Query Execution Layer
-export async function executeQuery(query: string, params: any[] = []) {
-  if (DB_PROVIDER === 'mssql') {
-    const pool = await getMssqlPool();
-    const request = pool.request();
-    params.forEach((param, index) => {
-      request.input(`param${index}`, param);
-    });
-    let parameterizedQuery = query;
-    let paramIndex = 0;
-    parameterizedQuery = parameterizedQuery.replace(/\?/g, () => `@param${paramIndex++}`);
-
-    const result = await request.query(parameterizedQuery);
-    return [result.recordset];
-  } else {
-    return await mysqlPool.execute(query, params);
-  }
-}
+// Eager warmup — eliminates cold-start latency on first API request
+mysqlPool.getConnection().then(conn => conn.release()).catch(() => {});
 ```
+
+### 3.3 Drizzle ORM Instance (`lib/db/index.ts`)
+```typescript
+import { drizzle } from 'drizzle-orm/mysql2';
+import { mysqlPool } from './pool';
+import * as schema from './schema';
+
+export const db = drizzle(mysqlPool, { schema, mode: 'default' });
+export * from './schema';
+export { eq, and, gte, sql, desc, isNull, lt, gt, ne } from 'drizzle-orm';
+```
+
+### 3.4 Required Environment Variables
+```env
+DB_PROVIDER=mysql
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=root
+MYSQL_DATABASE=teacottage_cms
+```
+
+### 3.5 Drizzle Schema Tables (`lib/db/schema.ts`)
+| # | Table | Purpose |
+|---|---|---|
+| 1 | `sites` | Multi-tenant managed web properties |
+| 2 | `users` | Staff portal accounts |
+| 3 | `user_sessions` | Secure HTTP-only session tokens |
+| 4 | `admin_audit_logs` | Security event audit trail |
+| 5 | `roles` | RBAC role definitions |
+| 6 | `permissions` | Granular permission codes |
+| 7 | `role_permissions` | Role → Permission assignments |
+| 8 | `user_site_roles` | User → Site → Role scoped assignments |
 
 ---
 
@@ -203,7 +213,7 @@ export async function triggerSiteRevalidation(siteSlug: string, paths: string[])
 | SSOT Requirement (Functional Spec) | Technical Architecture Implementation |
 | :--- | :--- |
 | **FS-ARCH-01**: Multi-Site Decoupled CMS | Next.js App Router monorepo split into `app/(admin)` and `app/api/v1` |
-| **FS-ARCH-02**: Discriminator Column Isolation | MySQL queries parameterized with `WHERE site_id = ?` via `site-context.ts` |
+| **FS-ARCH-02**: Discriminator Column Isolation | Drizzle ORM queries parameterized with `where(eq(table.siteId, siteId))` via `site-context.ts` |
 | **FS-ARCH-03**: Live Site Revalidation | Webhook dispatcher (`lib/webhooks.ts`) issuing HMAC-signed invalidation payloads |
-| **FS-ARCH-04**: High Performance Connection Pooling | Connection pool configured for active queries across MySQL and MSSQL LocalDB |
-| **FS-ARCH-05**: Multi-Database Provider Architecture | Dynamic strategy adapter in `lib/db.ts` supporting `mssql` (LocalDB) and `mysql` |
+| **FS-ARCH-04**: High Performance Connection Pooling | MySQL2 pool (`connectionLimit: 20`) with eager warmup in `lib/db/pool.ts` |
+| **FS-ARCH-05**: Single MySQL 8.0+ Provider | Pure Drizzle ORM against MySQL 8.0+ in `lib/db/index.ts` — no raw SQL, no fallback providers |

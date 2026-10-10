@@ -25,7 +25,19 @@ This skill guides the agent through maintaining and updating the specification-d
 
 ### 1. Functional Specification Creation / Modification
 * Check if `Functional spec/<number>-<module>-spec.md` exists.
-* Include SSOT Governance Header, Executive Summary, User Personas, Workflow Diagrams (Mermaid), Permission Matrix, Security Rules, Conceptual Data Model (ERD), API Endpoints, and Acceptance Criteria.
+* **Mandatory Functional Spec Structure**:
+  1. **SSOT Governance Header & Metadata**: Document ID (`FS-<MODULE>-001`), Version, Authority.
+  2. **Executive Summary & System Boundary**: Scope, objectives, architecture.
+  3. **User Personas & User Stories**:
+     - Standard format: `As a <Role>, I want <Goal>, so that <Benefit>`.
+  4. **Detailed Use Cases (`UC-<MODULE>-<ID>`)**:
+     - Unique Use Case Identifier (e.g. `UC-AUTH-001: Staff Member Login`).
+     - Primary Actor, Preconditions, Main Success Scenario (Step-by-step), Alternative/Error Flows, and Postconditions.
+  5. **Workflow Diagrams (Mermaid)**: Visual state transitions and sequence diagrams.
+  6. **Permission Matrix & RBAC Rules**: Role-based action definitions.
+  7. **Conceptual Data Model (ERD)**: Entities, attributes, and relationships.
+  8. **API Endpoint Specifications**: Request/response contracts and status codes.
+  9. **Acceptance Criteria & QA Test Case Traceability**: Mapping `FS-<MODULE>-<ID>` $\rightarrow$ `UC-<MODULE>-<ID>` $\rightarrow$ `TC-<MODULE>-<ID>`.
 
 ### 2. Technical Specification Alignment
 * Create or update `Technical spec/<number>-<module>-spec.md`.
@@ -42,3 +54,9 @@ This skill guides the agent through maintaining and updating the specification-d
 * **Database Tables**: Plural `snake_case` (`users`, `sites`, `cms_sessions`, `user_site_roles`).
 * **Files & Folders**: `kebab-case` (`site-context.ts`, `admin-login-flow.test.ts`).
 * **Code & Variables**: `PascalCase` for Components/Schemas (`LoginSchema`, `SiteSelector`), `camelCase` for functions/variables (`verifyPassword`, `generateSessionToken`). Avoid vague abbreviations (`paramIndex` instead of `p0`).
+
+---
+
+### 5. Prompt Directory Standard
+* **Mandatory Prompts Folder**: Whenever a prompt specification, master prompt, or execution prompt file is created, it MUST be saved inside the `Prompts/` directory (e.g. `Prompts/MASTER_PROMPT.md` or `Prompts/<prompt-name>.md`). Never save prompt files in the project root directory.
+
